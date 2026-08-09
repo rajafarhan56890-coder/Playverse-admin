@@ -9,13 +9,31 @@ import {
   query,
   serverTimestamp,
 } from "firebase/firestore";
+
 import { db } from "../config/firebase";
 import type { Game } from "../types/models";
 
+const GAMES_COLLECTION = "games";
+
+/**
+ * Fetch all games from Firebase.
+ *
+ * Important:
+ * Firestore document ID is added to the returned Game object
+ * so Edit / Delete / Toggle actions can target the correct document.
+ */
 export async function fetchAllGames(): Promise<Game[]> {
-  const q = query(collection(db, "games"), orderBy("createdAt", "desc"));
+  const q = query(
+    collection(db, GAMES_COLLECTION),
+    orderBy("createdAt", "desc")
+  );
+
   const snap = await getDocs(q);
-  return snap.docs.map((d) => d.data() as Game);
+
+  return snap.docs.map((document) => ({
+    id: document.id,
+    ...document.data(),
+  })) as Game[];
 }
 
 export interface GameFormInput {
@@ -30,78 +48,157 @@ export interface GameFormInput {
   isFeatured: boolean;
 }
 
+/**
+ * Create a new game in the existing Firebase games collection.
+ */
 export async function createGame(
   input: GameFormInput
 ): Promise<{ success: boolean; error?: string }> {
   try {
-    await addDoc(collection(db, "games"), {
+    await addDoc(collection(db, GAMES_COLLECTION), {
       name: input.name.trim(),
       description: input.description.trim(),
       imageURL: input.imageURL.trim(),
       gameURL: input.gameURL.trim(),
       deepLinkURL: input.deepLinkURL.trim() || null,
       category: input.category.trim(),
-      reward: input.reward,
+      reward: Number(input.reward),
       status: input.status,
-      isFeatured: input.isFeatured,
+      isFeatured: Boolean(input.isFeatured),
       playCount: 0,
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
     });
 
-    return { success: true };
+    return {
+      success: true,
+    };
   } catch (error) {
-    return { success: false, error: (error as Error).message };
+    console.error("Create game error:", error);
+
+    return {
+      success: false,
+      error:
+        error instanceof Error
+          ? error.message
+          : "Could not create game.",
+    };
   }
 }
 
+/**
+ * Update an existing game.
+ */
 export async function updateGame(
   gameId: string,
   input: GameFormInput
 ): Promise<{ success: boolean; error?: string }> {
   try {
-    const updates: Record<string, unknown> = {
+    if (!gameId) {
+      return {
+        success: false,
+        error: "Game ID is missing.",
+      };
+    }
+
+    const gameRef = doc(db, GAMES_COLLECTION, gameId);
+
+    await updateDoc(gameRef, {
       name: input.name.trim(),
       description: input.description.trim(),
       imageURL: input.imageURL.trim(),
       gameURL: input.gameURL.trim(),
       deepLinkURL: input.deepLinkURL.trim() || null,
       category: input.category.trim(),
-      reward: input.reward,
+      reward: Number(input.reward),
       status: input.status,
-      isFeatured: input.isFeatured,
+      isFeatured: Boolean(input.isFeatured),
       updatedAt: serverTimestamp(),
-    };
+    });
 
-    await updateDoc(doc(db, "games", gameId), updates);
-    return { success: true };
+    return {
+      success: true,
+    };
   } catch (error) {
-    return { success: false, error: (error as Error).message };
+    console.error("Update game error:", error);
+
+    return {
+      success: false,
+      error:
+        error instanceof Error
+          ? error.message
+          : "Could not update game.",
+    };
   }
 }
 
+/**
+ * Delete an existing game.
+ */
 export async function deleteGame(
   gameId: string
 ): Promise<{ success: boolean; error?: string }> {
   try {
-    await deleteDoc(doc(db, "games", gameId));
-    return { success: true };
+    if (!gameId) {
+      return {
+        success: false,
+        error: "Game ID is missing.",
+      };
+    }
+
+    await deleteDoc(doc(db, GAMES_COLLECTION, gameId));
+
+    return {
+      success: true,
+    };
   } catch (error) {
-    return { success: false, error: (error as Error).message };
+    console.error("Delete game error:", error);
+
+    return {
+      success: false,
+      error:
+        error instanceof Error
+          ? error.message
+          : "Could not delete game.",
+    };
   }
 }
 
+/**
+ * Toggle a game's active/inactive status.
+ */
 export async function toggleGameStatus(
   gameId: string,
   currentStatus: "active" | "inactive"
 ): Promise<{ success: boolean; error?: string }> {
   try {
-    await updateDoc(doc(db, "games", gameId), {
-      status: currentStatus === "active" ? "inactive" : "active",
+    if (!gameId) {
+      return {
+        success: false,
+        error: "Game ID is missing.",
+      };
+    }
+
+    const newStatus =
+      currentStatus === "active" ? "inactive" : "active";
+
+    await updateDoc(doc(db, GAMES_COLLECTION, gameId), {
+      status: newStatus,
       updatedAt: serverTimestamp(),
     });
-    return { success: true };
+
+    return {
+      success: true,
+    };
   } catch (error) {
-    return { success: false, error: (error as Error).message };
+    console.error("Toggle game status error:", error);
+
+    return {
+      success: false,
+      error:
+        error instanceof Error
+          ? error.message
+          : "Could not update game status.",
+    };
   }
-}
+      }
