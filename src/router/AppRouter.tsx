@@ -50,7 +50,12 @@ export default function AppRouter() {
 
   useEffect(() => {
     const unsubscribe = init();
-    return unsubscribe;
+
+    return () => {
+      if (typeof unsubscribe === "function") {
+        unsubscribe();
+      }
+    };
   }, [init]);
 
   if (isLoading) {
