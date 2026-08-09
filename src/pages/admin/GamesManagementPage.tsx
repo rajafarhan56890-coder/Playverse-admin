@@ -1,450 +1,394 @@
-import { useState } from "react";
-
-interface Game {
-  id: string;
-  name: string;
-  description: string;
-  totalCoins: number;
-  difficulty: "easy" | "medium" | "hard";
-  totalLevels: number;
-  active: boolean;
-}
+import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import {
+  fetchAllGames,
+  deleteGame,
+  toggleGameStatus,
+} from "../../services/games.service";
+import type { Game } from "../../types/models";
 
 export default function GamesManagementPage() {
-  const [games, setGames] = useState<Game[]>([
-    {
-      id: "flappy-birds",
-      name: "Flappy Birds",
-      description: "Navigate through pipes without crashing",
-      totalCoins: 1000,
-      difficulty: "easy",
-      totalLevels: 100,
-      active: true,
-    },
-    {
-      id: "coin-clicker",
-      name: "Coin Clicker",
-      description: "Tap coins as fast as you can",
-      totalCoins: 1000,
-      difficulty: "medium",
-      totalLevels: 100,
-      active: true,
-    },
-    {
-      id: "color-match",
-      name: "Color Match",
-      description: "Match colors correctly",
-      totalCoins: 1000,
-      difficulty: "hard",
-      totalLevels: 100,
-      active: true,
-    },
-  ]);
+  const navigate = useNavigate();
 
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [formData, setFormData] = useState<Game>({
-    id: "",
-    name: "",
-    description: "",
-    totalCoins: 0,
-    difficulty: "easy",
-    totalLevels: 100,
-    active: true,
-  });
-  const [isAddingNew, setIsAddingNew] = useState(false);
+  const [games, setGames] = useState<Game[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [busyId, setBusyId] = useState<string | null>(null);
 
-  const handleEdit = (game: Game) => {
-    setEditingId(game.id);
-    setFormData(game);
-    setIsAddingNew(false);
-  };
+  async function loadGames() {
+    setIsLoading(true);
+    setError(null);
 
-  const handleAddNew = () => {
-    setFormData({
-      id: `game-${Date.now()}`,
-      name: "",
-      description: "",
-      totalCoins: 1000,
-      difficulty: "easy",
-      totalLevels: 100,
-      active: true,
-    });
-    setEditingId(null);
-    setIsAddingNew(true);
-  };
+    try {
+      const data = await fetchAllGames();
+      setGames(data);
+    } catch (err) {
+      console.error("Failed to load games:", err);
 
-  const handleSave = () => {
-    if (isAddingNew) {
-      setGames([...games, formData]);
-      setIsAddingNew(false);
-    } else {
-      setGames(
-        games.map((g) => (g.id === editingId ? formData : g))
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Could not load games from Firebase."
       );
-      setEditingId(null);
+    } finally {
+      setIsLoading(false);
     }
+  }
 
-    setFormData({
-      id: "",
-      name: "",
-      description: "",
-      totalCoins: 0,
-      difficulty: "easy",
-      totalLevels: 100,
-      active: true,
-    });
-  };
+  useEffect(() => {
+    loadGames();
+  }, []);
 
-  const handleDelete = (id: string) => {
-    if (confirm("Are you sure you want to delete this game?")) {
-      setGames(games.filter((g) => g.id !== id));
+  async function handleToggle(game: Game) {
+    if (busyId) return;
+
+    setBusyId(game.id);
+    setError(null);
+
+    try {
+      const result = await toggleGameStatus(
+        game.id,
+        game.status
+      );
+
+      if (!result.success) {
+        throw new Error(
+          result.error ?? "Could not update game status."
+        );
+      }
+
+      setGames((currentGames) =>
+        currentGames.map((item) =>
+          item.id === game.id
+            ? {
+                ...item,
+                status:
+                  item.status === "active"
+                    ? "inactive"
+                    : "active",
+              }
+            : item
+        )
+      );
+    } catch (err) {
+      console.error("Toggle game status error:", err);
+
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Could not update game status."
+      );
+    } finally {
+      setBusyId(null);
     }
-  };
+  }
 
-  const handleToggle = (id: string) => {
-    setGames(
-      games.map((g) => (g.id === id ? { ...g, active: !g.active } : g))
+  async function handleDelete(game: Game) {
+    const confirmed = window.confirm(
+      `Delete "${game.name}"?\n\nThis will permanently remove this game from Firebase.`
     );
-  };
+
+    if (!confirmed || busyId) return;
+
+    setBusyId(game.id);
+    setError(null);
+
+    try {
+      const result = await deleteGame(game.id);
+
+      if (!result.success) {
+        throw new Error(
+          result.error ?? "Could not delete game."
+        );
+      }
+
+      setGames((currentGames) =>
+        currentGames.filter((item) => item.id !== game.id)
+      );
+    } catch (err) {
+      console.error("Delete game error:", err);
+
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Could not delete game."
+      );
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  function handleEdit(game: Game) {
+    navigate(`/dashboard/games/${game.id}/edit`);
+  }
+
+  function handleAddGame() {
+    navigate("/dashboard/games/new");
+  }
 
   return (
-    <div style={styles.container}>
-      <div style={styles.header}>
-        <h1 style={styles.title}>🎮 Games Management</h1>
-        <button onClick={handleAddNew} style={styles.addBtn}>
+    <div>
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
+        <div>
+          <h1 className="text-2xl font-display font-semibold text-pv-text">
+            Games Management
+          </h1>
+
+          <p className="text-sm text-pv-textSecondary mt-1">
+            Manage games stored in your Firebase games collection.
+          </p>
+        </div>
+
+        <button
+          onClick={handleAddGame}
+          className="rounded-full bg-pv-primary text-pv-bg px-4 py-2 text-sm font-medium hover:bg-pv-primaryPressed transition"
+        >
           + Add New Game
         </button>
       </div>
 
-      {(isAddingNew || editingId) && (
-        <div style={styles.formCard}>
-          <h2 style={styles.formTitle}>
-            {isAddingNew ? "Add New Game" : "Edit Game"}
-          </h2>
+      {/* Firebase Info */}
+      <div className="mb-5 rounded-xl border border-pv-border bg-pv-elevated px-4 py-3">
+        <div className="flex items-center justify-between gap-4">
+          <div>
+            <p className="text-sm font-medium text-pv-text">
+              Firebase Games Collection
+            </p>
 
-          <div style={styles.formGrid}>
-            <div style={styles.formGroup}>
-              <label>Game Name *</label>
-              <input
-                type="text"
-                value={formData.name}
-                onChange={(e) =>
-                  setFormData({ ...formData, name: e.target.value })
-                }
-                style={styles.input}
-                placeholder="e.g., Flappy Birds"
-              />
-            </div>
-
-            <div style={styles.formGroup}>
-              <label>Description *</label>
-              <textarea
-                value={formData.description}
-                onChange={(e) =>
-                  setFormData({ ...formData, description: e.target.value })
-                }
-                style={{ ...styles.input, minHeight: "80px" }}
-                placeholder="Game description..."
-              />
-            </div>
-
-            <div style={styles.formGroup}>
-              <label>Total Coins</label>
-              <input
-                type="number"
-                value={formData.totalCoins}
-                onChange={(e) =>
-                  setFormData({
-                    ...formData,
-                    totalCoins: Number(e.target.value),
-                  })
-                }
-                style={styles.input}
-              />
-            </div>
-
-            <div style={styles.formGroup}>
-              <label>Difficulty</label>
-              <select
-                value={formData.difficulty}
-                onChange={(e) =>
-                  setFormData({
-                    ...formData,
-                    difficulty: e.target.value as "easy" | "medium" | "hard",
-                  })
-                }
-                style={styles.input}
-              >
-                <option value="easy">Easy</option>
-                <option value="medium">Medium</option>
-                <option value="hard">Hard</option>
-              </select>
-            </div>
-
-            <div style={styles.formGroup}>
-              <label>Total Levels</label>
-              <input
-                type="number"
-                value={formData.totalLevels}
-                onChange={(e) =>
-                  setFormData({
-                    ...formData,
-                    totalLevels: Number(e.target.value),
-                  })
-                }
-                style={styles.input}
-              />
-            </div>
+            <p className="text-xs text-pv-textMuted mt-1">
+              {games.length} game{games.length !== 1 ? "s" : ""} loaded
+            </p>
           </div>
 
-          <div style={styles.formButtons}>
+          <button
+            onClick={loadGames}
+            disabled={isLoading}
+            className="text-xs text-pv-primary hover:underline disabled:opacity-50"
+          >
+            {isLoading ? "Refreshing..." : "Refresh"}
+          </button>
+        </div>
+      </div>
+
+      {/* Error */}
+      {error && (
+        <div className="mb-5 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <p className="text-sm font-medium text-red-400">
+                Firebase Error
+              </p>
+
+              <p className="text-xs text-red-300 mt-1">
+                {error}
+              </p>
+            </div>
+
             <button
-              onClick={handleSave}
-              style={{
-                ...styles.btn,
-                backgroundColor: "#28a745",
-              }}
+              onClick={loadGames}
+              className="text-xs text-red-300 hover:underline whitespace-nowrap"
             >
-              Save Game
-            </button>
-            <button
-              onClick={() => {
-                setEditingId(null);
-                setIsAddingNew(false);
-              }}
-              style={{
-                ...styles.btn,
-                backgroundColor: "#6c757d",
-              }}
-            >
-              Cancel
+              Try again
             </button>
           </div>
         </div>
       )}
 
-      <div style={styles.gamesGrid}>
-        {games.map((game) => (
-          <div key={game.id} style={styles.gameCard}>
-            <div style={styles.gameHeader}>
-              <div>
-                <h3 style={styles.gameName}>{game.name}</h3>
-                <span
-                  style={{
-                    ...styles.difficultyBadge,
-                    backgroundColor:
-                      game.difficulty === "easy"
-                        ? "#d4edda"
-                        : game.difficulty === "medium"
-                        ? "#fff3cd"
-                        : "#f8d7da",
-                    color:
-                      game.difficulty === "easy"
-                        ? "#155724"
-                        : game.difficulty === "medium"
-                        ? "#856404"
-                        : "#721c24",
-                  }}
-                >
-                  {game.difficulty}
-                </span>
-              </div>
-              <button
-                onClick={() => handleToggle(game.id)}
-                style={{
-                  ...styles.toggleBtn,
-                  backgroundColor: game.active ? "#28a745" : "#dc3545",
-                }}
-              >
-                {game.active ? "Active" : "Inactive"}
-              </button>
-            </div>
+      {/* Loading */}
+      {isLoading ? (
+        <div className="bg-pv-elevated border border-pv-border rounded-2xl flex items-center justify-center h-64">
+          <div className="text-center">
+            <div className="w-8 h-8 border-2 border-pv-primary border-t-transparent rounded-full animate-spin mx-auto" />
 
-            <p style={styles.description}>{game.description}</p>
-
-            <div style={styles.gameStats}>
-              <div style={styles.stat}>
-                <span>Levels:</span>
-                <strong>{game.totalLevels}</strong>
-              </div>
-              <div style={styles.stat}>
-                <span>Max Coins:</span>
-                <strong>{game.totalCoins.toLocaleString()}</strong>
-              </div>
-            </div>
-
-            <div style={styles.gameActions}>
-              <button
-                onClick={() => handleEdit(game)}
-                style={{
-                  ...styles.smallBtn,
-                  backgroundColor: "#17a2b8",
-                }}
-              >
-                Edit
-              </button>
-              <button
-                onClick={() => handleDelete(game.id)}
-                style={{
-                  ...styles.smallBtn,
-                  backgroundColor: "#dc3545",
-                }}
-              >
-                Delete
-              </button>
-            </div>
+            <p className="text-sm text-pv-textSecondary mt-3">
+              Loading games from Firebase...
+            </p>
           </div>
-        ))}
-      </div>
+        </div>
+      ) : games.length === 0 ? (
+        /* Empty State */
+        <div className="bg-pv-elevated border border-pv-border rounded-2xl px-6 py-16 text-center">
+          <div className="text-5xl mb-4">🎮</div>
+
+          <h2 className="text-lg font-semibold text-pv-text">
+            No games found
+          </h2>
+
+          <p className="text-sm text-pv-textSecondary mt-2">
+            There are currently no games in your Firebase games collection.
+          </p>
+
+          <button
+            onClick={handleAddGame}
+            className="mt-5 rounded-full bg-pv-primary text-pv-bg px-5 py-2.5 text-sm font-medium hover:bg-pv-primaryPressed"
+          >
+            + Add Your First Game
+          </button>
+        </div>
+      ) : (
+        /* Games */
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
+          {games.map((game) => {
+            const isBusy = busyId === game.id;
+
+            return (
+              <div
+                key={game.id}
+                className="bg-pv-elevated border border-pv-border rounded-2xl overflow-hidden"
+              >
+                {/* Image */}
+                <div className="relative h-44 bg-pv-elevated2">
+                  {game.imageURL ? (
+                    <img
+                      src={game.imageURL}
+                      alt={game.name}
+                      className="w-full h-full object-cover"
+                      onError={(event) => {
+                        event.currentTarget.style.display = "none";
+                      }}
+                    />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center">
+                      <span className="text-5xl">🎮</span>
+                    </div>
+                  )}
+
+                  {/* Status */}
+                  <div className="absolute top-3 right-3">
+                    <button
+                      onClick={() => handleToggle(game)}
+                      disabled={isBusy}
+                      className={`text-xs px-3 py-1.5 rounded-full font-medium backdrop-blur-sm disabled:opacity-60 ${
+                        game.status === "active"
+                          ? "bg-pv-success/90 text-white"
+                          : "bg-gray-700/90 text-gray-200"
+                      }`}
+                    >
+                      {isBusy
+                        ? "Updating..."
+                        : game.status === "active"
+                        ? "✓ Active"
+                        : "Inactive"}
+                    </button>
+                  </div>
+
+                  {/* Featured */}
+                  {game.isFeatured && (
+                    <div className="absolute top-3 left-3">
+                      <span className="text-xs px-3 py-1.5 rounded-full bg-pv-coin text-pv-bg font-semibold">
+                        ★ Featured
+                      </span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Content */}
+                <div className="p-5">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <h2 className="text-lg font-semibold text-pv-text truncate">
+                        {game.name}
+                      </h2>
+
+                      <p className="text-xs text-pv-textMuted mt-1 truncate">
+                        ID: {game.id}
+                      </p>
+                    </div>
+
+                    {game.category && (
+                      <span className="shrink-0 text-xs px-2.5 py-1 rounded-full bg-pv-elevated2 text-pv-textSecondary">
+                        {game.category}
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Description */}
+                  <p className="text-sm text-pv-textSecondary mt-4 line-clamp-2 min-h-[42px]">
+                    {game.description || "No description available."}
+                  </p>
+
+                  {/* Stats */}
+                  <div className="grid grid-cols-2 gap-3 mt-5">
+                    <div className="rounded-xl bg-pv-elevated2 px-3 py-3">
+                      <p className="text-xs text-pv-textMuted">
+                        Reward
+                      </p>
+
+                      <p className="text-sm font-semibold text-pv-coin mt-1">
+                        {Number(game.reward || 0).toLocaleString()} coins
+                      </p>
+                    </div>
+
+                    <div className="rounded-xl bg-pv-elevated2 px-3 py-3">
+                      <p className="text-xs text-pv-textMuted">
+                        Plays
+                      </p>
+
+                      <p className="text-sm font-semibold text-pv-text mt-1">
+                        {Number(game.playCount || 0).toLocaleString()}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* URLs */}
+                  <div className="mt-4 space-y-2">
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="text-xs text-pv-textMuted">
+                        Game URL
+                      </span>
+
+                      {game.gameURL ? (
+                        <a
+                          href={game.gameURL}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-xs text-pv-primary hover:underline truncate max-w-[180px]"
+                        >
+                          Open
+                        </a>
+                      ) : (
+                        <span className="text-xs text-pv-textMuted">
+                          —
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="text-xs text-pv-textMuted">
+                        Deep Link
+                      </span>
+
+                      <span className="text-xs text-pv-textSecondary truncate max-w-[180px]">
+                        {game.deepLinkURL || "—"}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Actions */}
+                  <div className="flex gap-2 mt-5 pt-4 border-t border-pv-border">
+                    <button
+                      onClick={() => handleEdit(game)}
+                      disabled={isBusy}
+                      className="flex-1 rounded-lg bg-pv-primary/15 text-pv-primary px-3 py-2 text-sm font-medium hover:bg-pv-primary/25 disabled:opacity-50"
+                    >
+                      Edit
+                    </button>
+
+                    <button
+                      onClick={() => handleDelete(game)}
+                      disabled={isBusy}
+                      className="flex-1 rounded-lg bg-red-500/10 text-red-400 px-3 py-2 text-sm font-medium hover:bg-red-500/20 disabled:opacity-50"
+                    >
+                      {isBusy ? "Please wait..." : "Delete"}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
-}
-
-const styles: Record<string, any> = {
-  container: {
-    padding: "20px",
-    backgroundColor: "#f8f9fa",
-    minHeight: "100vh",
-  },
-  header: {
-    display: "flex",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: "30px",
-  },
-  title: {
-    fontSize: "28px",
-    fontWeight: "700",
-    color: "#333",
-    margin: "0",
-  },
-  addBtn: {
-    padding: "12px 20px",
-    backgroundColor: "#28a745",
-    color: "#fff",
-    border: "none",
-    borderRadius: "5px",
-    fontWeight: "600",
-    cursor: "pointer",
-    fontSize: "14px",
-  },
-  formCard: {
-    backgroundColor: "#fff",
-    borderRadius: "10px",
-    padding: "20px",
-    marginBottom: "30px",
-    boxShadow: "0 2px 8px rgba(0, 0, 0, 0.1)",
-  },
-  formTitle: {
-    fontSize: "20px",
-    fontWeight: "600",
-    marginBottom: "20px",
-    color: "#333",
-  },
-  formGrid: {
-    display: "grid",
-    gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))",
-    gap: "15px",
-    marginBottom: "20px",
-  },
-  formGroup: {
-    display: "flex",
-    flexDirection: "column" as const,
-    gap: "5px",
-  },
-  input: {
-    padding: "10px",
-    border: "1px solid #dee2e6",
-    borderRadius: "5px",
-    fontSize: "14px",
-    fontFamily: "inherit",
-  },
-  formButtons: {
-    display: "flex",
-    gap: "10px",
-  },
-  btn: {
-    padding: "12px 20px",
-    border: "none",
-    borderRadius: "5px",
-    color: "#fff",
-    fontWeight: "600",
-    cursor: "pointer",
-    fontSize: "14px",
-  },
-  gamesGrid: {
-    display: "grid",
-    gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))",
-    gap: "20px",
-  },
-  gameCard: {
-    backgroundColor: "#fff",
-    borderRadius: "10px",
-    padding: "20px",
-    boxShadow: "0 2px 8px rgba(0, 0, 0, 0.1)",
-  },
-  gameHeader: {
-    display: "flex",
-    justifyContent: "space-between",
-    alignItems: "flex-start",
-    marginBottom: "15px",
-    paddingBottom: "15px",
-    borderBottom: "1px solid #dee2e6",
-  },
-  gameName: {
-    margin: "0 0 8px 0",
-    fontSize: "18px",
-    fontWeight: "600",
-    color: "#333",
-  },
-  difficultyBadge: {
-    display: "inline-block",
-    padding: "4px 8px",
-    borderRadius: "3px",
-    fontSize: "12px",
-    fontWeight: "600",
-    textTransform: "capitalize",
-  },
-  toggleBtn: {
-    padding: "8px 12px",
-    border: "none",
-    borderRadius: "5px",
-    color: "#fff",
-    fontWeight: "600",
-    cursor: "pointer",
-    fontSize: "12px",
-  },
-  description: {
-    margin: "0 0 15px 0",
-    color: "#666",
-    fontSize: "14px",
-    lineHeight: "1.5",
-  },
-  gameStats: {
-    display: "flex",
-    gap: "20px",
-    marginBottom: "15px",
-    paddingBottom: "15px",
-    borderBottom: "1px solid #eee",
-  },
-  stat: {
-    display: "flex",
-    flexDirection: "column" as const,
-    gap: "4px",
-    fontSize: "13px",
-  },
-  gameActions: {
-    display: "flex",
-    gap: "10px",
-  },
-  smallBtn: {
-    flex: 1,
-    padding: "8px 12px",
-    border: "none",
-    borderRadius: "5px",
-    color: "#fff",
-    fontWeight: "600",
-    cursor: "pointer",
-    fontSize: "12px",
-  },
-};
+            }
