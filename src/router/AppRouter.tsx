@@ -5,13 +5,21 @@ import {
   Route,
   Navigate,
 } from "react-router-dom";
+
 import LoginPage from "../pages/LoginPage";
 import DashboardLayout from "../layouts/DashboardLayout";
 import DashboardPage from "../pages/DashboardPage";
+
 import UsersListPage from "../pages/users/UsersListPage";
 import UserDetailPage from "../pages/users/UserDetailPage";
+
 import GamesListPage from "../pages/games/GamesListPage";
 import GameFormPage from "../pages/games/GameFormPage";
+
+import GamesManagementPage from "../pages/admin/GamesManagementPage";
+import PaymentMethodsPage from "../pages/admin/PaymentMethodsPage";
+import AdminSettingsPage from "../pages/admin/AdminSettingsPage";
+
 import { useAdminAuthStore } from "../store/adminAuthStore";
 
 function FullScreenLoader() {
@@ -22,16 +30,15 @@ function FullScreenLoader() {
   );
 }
 
-/**
- * Guards every dashboard route. Checks BOTH that a Firebase session exists
- * AND that the admin custom claim is present — a signed-in-but-not-admin
- * user is bounced to /login, never shown a flash of protected content.
- */
 function RequireAdmin({ children }: { children: ReactNode }) {
   const { user, isAdmin, isLoading } = useAdminAuthStore();
 
   if (isLoading) return <FullScreenLoader />;
-  if (!user || !isAdmin) return <Navigate to="/login" replace />;
+
+  if (!user || !isAdmin) {
+    return <Navigate to="/login" replace />;
+  }
+
   return <>{children}</>;
 }
 
@@ -46,17 +53,26 @@ export default function AppRouter() {
     return unsubscribe;
   }, [init]);
 
-  if (isLoading) return <FullScreenLoader />;
+  if (isLoading) {
+    return <FullScreenLoader />;
+  }
 
   return (
     <BrowserRouter>
       <Routes>
+        {/* Login */}
         <Route
           path="/login"
           element={
-            user && isAdmin ? <Navigate to="/dashboard" replace /> : <LoginPage />
+            user && isAdmin ? (
+              <Navigate to="/dashboard" replace />
+            ) : (
+              <LoginPage />
+            )
           }
         />
+
+        {/* Protected Dashboard */}
         <Route
           path="/dashboard"
           element={
@@ -65,15 +81,43 @@ export default function AppRouter() {
             </RequireAdmin>
           }
         >
+          {/* Dashboard */}
           <Route index element={<DashboardPage />} />
+
+          {/* Users */}
           <Route path="users" element={<UsersListPage />} />
           <Route path="users/:uid" element={<UserDetailPage />} />
+
+          {/* Existing Games */}
           <Route path="games" element={<GamesListPage />} />
           <Route path="games/new" element={<GameFormPage />} />
           <Route path="games/:gameId/edit" element={<GameFormPage />} />
+
+          {/* New Admin Game Management */}
+          <Route
+            path="games-management"
+            element={<GamesManagementPage />}
+          />
+
+          {/* Payment Methods */}
+          <Route
+            path="payment-methods"
+            element={<PaymentMethodsPage />}
+          />
+
+          {/* App Settings / Coin Conversion */}
+          <Route
+            path="settings"
+            element={<AdminSettingsPage />}
+          />
         </Route>
-        <Route path="*" element={<Navigate to="/dashboard" replace />} />
+
+        {/* Unknown routes */}
+        <Route
+          path="*"
+          element={<Navigate to="/dashboard" replace />}
+        />
       </Routes>
     </BrowserRouter>
   );
-}
+            }
