@@ -1,18 +1,16 @@
 import { useEffect, type ReactNode } from "react";
 import {
   BrowserRouter,
-  Routes,
-  Route,
   Navigate,
+  Route,
+  Routes,
 } from "react-router-dom";
 
 import LoginPage from "../pages/LoginPage";
 import DashboardLayout from "../layouts/DashboardLayout";
 import DashboardPage from "../pages/DashboardPage";
-
 import UsersListPage from "../pages/users/UsersListPage";
 import UserDetailPage from "../pages/users/UserDetailPage";
-
 import GamesListPage from "../pages/games/GamesListPage";
 import GameFormPage from "../pages/games/GameFormPage";
 
@@ -33,7 +31,9 @@ function FullScreenLoader() {
 function RequireAdmin({ children }: { children: ReactNode }) {
   const { user, isAdmin, isLoading } = useAdminAuthStore();
 
-  if (isLoading) return <FullScreenLoader />;
+  if (isLoading) {
+    return <FullScreenLoader />;
+  }
 
   if (!user || !isAdmin) {
     return <Navigate to="/login" replace />;
@@ -60,7 +60,6 @@ export default function AppRouter() {
   return (
     <BrowserRouter>
       <Routes>
-        {/* Login */}
         <Route
           path="/login"
           element={
@@ -72,7 +71,6 @@ export default function AppRouter() {
           }
         />
 
-        {/* Protected Dashboard */}
         <Route
           path="/dashboard"
           element={
@@ -81,38 +79,34 @@ export default function AppRouter() {
             </RequireAdmin>
           }
         >
-          {/* Dashboard */}
           <Route index element={<DashboardPage />} />
 
-          {/* Users */}
           <Route path="users" element={<UsersListPage />} />
           <Route path="users/:uid" element={<UserDetailPage />} />
 
-          {/* Existing Games */}
           <Route path="games" element={<GamesListPage />} />
           <Route path="games/new" element={<GameFormPage />} />
-          <Route path="games/:gameId/edit" element={<GameFormPage />} />
+          <Route
+            path="games/:gameId/edit"
+            element={<GameFormPage />}
+          />
 
-          {/* New Admin Game Management */}
           <Route
             path="games-management"
             element={<GamesManagementPage />}
           />
 
-          {/* Payment Methods */}
           <Route
             path="payment-methods"
             element={<PaymentMethodsPage />}
           />
 
-          {/* App Settings / Coin Conversion */}
           <Route
             path="settings"
             element={<AdminSettingsPage />}
           />
         </Route>
 
-        {/* Unknown routes */}
         <Route
           path="*"
           element={<Navigate to="/dashboard" replace />}
@@ -120,4 +114,4 @@ export default function AppRouter() {
       </Routes>
     </BrowserRouter>
   );
-            
+}
